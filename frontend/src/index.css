@@ -1,0 +1,95 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Manrope", sans-serif;
+  color: #1f2937;
+  background: linear-gradient(180deg, #fbfbfa 0%, #f5f3ee 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.card {
+  @apply rounded-2xl bg-white/90 shadow-soft border border-slate-100;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition;
+}
+
+.btn-primary {
+  @apply btn bg-brand-500 text-white hover:bg-brand-600;
+}
+
+.btn-secondary {
+  @apply btn bg-accent-500 text-white hover:bg-accent-600;
+}
+
+.btn-ghost {
+  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+}
+
+.Toastify__toast-container {
+  width: auto;
+  max-width: 420px;
+}
+
+.Toastify__toast {
+  @apply rounded-2xl border border-slate-200 bg-white shadow-soft;
+  font-family: "Manrope", sans-serif;
+  padding: 14px 16px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.Toastify__toast--success {
+  @apply border-emerald-200 bg-emerald-50;
+}
+
+.Toastify__toast--success .Toastify__toast-icon {
+  color: #10b981;
+}
+
+.Toastify__toast--error {
+  @apply border-red-200 bg-red-50;
+}
+
+.Toastify__toast--error .Toastify__toast-icon {
+  color: #ef4444;
+}
+
+.Toastify__toast--info {
+  @apply border-blue-200 bg-blue-50;
+}
+
+.Toastify__toast--info .Toastify__toast-icon {
+  color: #2f63ff;
+}
+
+.Toastify__toast--warning {
+  @apply border-amber-200 bg-amber-50;
+}
+
+.Toastify__toast--warning .Toastify__toast-icon {
+  color: #f59e0b;
+}
+
+.Toastify__toast-body {
+  color: #374151;
+  font-weight: 500;
+  padding: 0;
+}
+
+.Toastify__progress-bar {
+  @apply bg-gradient-to-r from-brand-500 to-accent-500;
+}
