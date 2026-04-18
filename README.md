@@ -1,283 +1,211 @@
 # Patient Appointment Scheduling Portal
 
-A complete full-stack web application where:
-- Patients can search doctors and book appointments
-- Doctors can manage availability and appointment requests
-- Admins can approve doctors and monitor the platform
+Full-stack appointment platform with role-based access:
+- Patients browse approved doctors and manage bookings.
+- Doctors manage availability and appointment status.
+- Admins approve doctor accounts and monitor platform activity.
 
-Tech stack:
-- Frontend: React + Vite + Tailwind CSS
-- Backend: Node.js + Express.js (MVC)
-- Database: MongoDB + Mongoose
-- Auth: JWT + role-based authorization
+## 1. System Design
 
----
+### Architecture Style
+- Frontend: SPA (React + Vite + Tailwind)
+- Backend: REST API (Node.js + Express, MVC structure)
+- Database: MongoDB (Mongoose models)
+- Auth: JWT with role-based middleware
 
-## 1) Project Structure
+### High-Level Component View
+```mermaid
+flowchart LR
+    U[Browser Client] --> F[React Frontend]
+    F -->|HTTP + JWT| B[Express API]
+    B --> M[(MongoDB)]
+    B --> N[Notification Service]
+    N --> E[Email Service SMTP or Mock]
+```
+
+### Request Flow
+1. User authenticates via `/api/auth/*`.
+2. Frontend stores JWT and sends `Authorization: Bearer <token>` on API calls.
+3. Backend validates token in `protect` middleware.
+4. Backend enforces role rules with `authorize(...)` middleware.
+5. Controllers execute business logic and persist data via Mongoose models.
+
+## 2. Project Structure
 
 ```text
 data_engineering_project/
   backend/
     src/
-      config/
-        db.js
-      controllers/
-        adminController.js
-        appointmentController.js
-        authController.js
-        doctorController.js
-        notificationController.js
-        patientController.js
-      middlewares/
-        authMiddleware.js
-        errorMiddleware.js
-      models/
-        Appointment.js
-        DoctorProfile.js
-        Notification.js
-        User.js
-      routes/
-        adminRoutes.js
-        appointmentRoutes.js
-        authRoutes.js
-        doctorRoutes.js
-        notificationRoutes.js
-        patientRoutes.js
-      scripts/
-        seedAdmin.js
-      services/
-        emailService.js
-        notificationService.js
-      utils/
-        asyncHandler.js
-        generateToken.js
-      server.js
-    .env.example
-    package.json
-
+      config/         # DB connection
+      controllers/    # Business logic by domain
+      middlewares/    # Auth, validation, error handling
+      models/         # Mongoose schemas
+      routes/         # REST route modules
+      scripts/        # Seed utilities
+      services/       # Notification + email services
+      utils/          # Shared helpers
+      server.js       # App bootstrap
   frontend/
     src/
-      api/
-        client.js
-      components/
-        Navbar.jsx
-        ProtectedRoute.jsx
-      context/
-        AuthContext.jsx
-      layouts/
-        AppLayout.jsx
-      pages/
-        auth/
-          LoginPage.jsx
-          RegisterPage.jsx
-        admin/
-          AdminDashboard.jsx
-        doctor/
-          DoctorDashboard.jsx
-        patient/
-          PatientDashboard.jsx
-        HomePage.jsx
-      utils/
-        date.js
-      App.jsx
-      index.css
-      main.jsx
-    .env.example
-    index.html
-    package.json
-    postcss.config.js
-    tailwind.config.js
-    vite.config.js
-
-  README.md
+      api/            # Axios client
+      components/     # Shared UI and route guards
+      context/        # Auth context
+      layouts/        # Layout shell
+      pages/          # Screens by feature/role
+      utils/          # UI helpers
 ```
 
----
+## 3. Data Model
 
-## 2) Database Design
+### User
+- `name`, `email`, `password`, `role`, `isApproved`
+- Roles: `patient`, `doctor`, `admin`
+- Password hashing handled with a pre-save hook (`bcryptjs`).
+- `isApproved` defaults to `false` only for doctors.
 
-### User Schema (`backend/src/models/User.js`)
-- `name`: string
-- `email`: unique string
-- `password`: hashed with bcrypt
-- `role`: `patient | doctor | admin`
-- `isApproved`: used mainly for doctor approval workflow
+### DoctorProfile
+- One-to-one with doctor user (`doctor` unique ref)
+- `specialization`, `bio`, `experienceYears`
+- `availability`: array of `{ dayOfWeek: 0..6, slots: string[] }`
 
-### Doctor Profile Schema (`backend/src/models/DoctorProfile.js`)
-- `doctor`: reference to User (doctor)
-- `specialization`: string
-- `bio`: string
-- `experienceYears`: number
-- `availability`: weekly slots
-  - `dayOfWeek`: 0 to 6
-  - `slots`: array of strings like `"09:00-09:30"`
+### Appointment
+- `patient`, `doctor`, `date`, `timeSlot`, `status`, `reason`
+- Status values: `pending`, `confirmed`, `rejected`, `cancelled`, `completed`
+- Includes `bookedAt` and `updatedAtStatus`
+- Double-booking protection uses a unique partial index on:
+  - `{ doctor, date, timeSlot }`
+  - applied only when status is `pending` or `confirmed`
 
-### Appointment Schema (`backend/src/models/Appointment.js`)
-- `patient`: reference to User
-- `doctor`: reference to User
-- `date`: appointment date (`YYYY-MM-DD` recommended)
-- `timeSlot`: slot string
-- `status`: `pending | confirmed | rejected | cancelled | completed`
-- `bookedAt`, `updatedAtStatus`, timestamps
+### Notification
+- `user`, `title`, `message`, `isRead`, `type`
+- Types: `booking`, `status`, `admin`
 
-Double-booking prevention:
-- Unique index on `{doctor, date, timeSlot}`
-- Applied only to active statuses (`pending`, `confirmed`)
+## 4. Core Business Flows
 
-### Notification Schema (`backend/src/models/Notification.js`)
-- `user`: reference to User
-- `title`, `message`
-- `isRead`
-- `type`: booking/status/admin
+### Doctor Onboarding and Approval
+1. Doctor registers via auth API.
+2. User is created with role `doctor` and `isApproved=false`.
+3. Admin reviews doctors and updates approval status.
+4. Unapproved doctors cannot log in.
 
----
+### Appointment Booking
+1. Patient selects doctor, date, slot.
+2. Backend verifies doctor exists and is approved.
+3. Backend validates slot against doctor availability for that weekday.
+4. Appointment is created with `pending` status.
+5. Doctor receives notification (and email if SMTP configured).
+6. If slot is already taken, API returns `409` conflict.
 
-## 3) Backend API (REST)
+### Appointment Lifecycle
+- Patient can cancel/reschedule unless appointment is already `completed` or `cancelled`.
+- Doctor can set status to `confirmed`, `rejected`, or `completed`.
+- Status changes trigger patient notifications.
+
+## 5. API Design Summary
 
 Base URL: `http://localhost:5000/api`
 
+### Health
+- `GET /health`
+
 ### Auth
-- `POST /auth/register` - register patient/doctor
-- `POST /auth/login` - login and receive JWT
-- `GET /auth/me` - current user (protected)
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me` (protected)
 
 ### Patient
-- `GET /patient/doctors?specialization=...` - search doctors
-- `GET /patient/doctors/:doctorId` - doctor profile
+- `GET /patient/public/doctors` (public directory)
+- `GET /patient/doctors` (patient only)
+- `GET /patient/doctors/:doctorId` (patient only)
 
-### Appointments (Patient)
-- `POST /appointments` - book appointment
-- `GET /appointments/my` - patient history
-- `PATCH /appointments/:appointmentId/cancel` - cancel
-- `PATCH /appointments/:appointmentId/reschedule` - reschedule
+### Appointments (patient only)
+- `POST /appointments`
+- `GET /appointments/my`
+- `PATCH /appointments/:appointmentId/cancel`
+- `PATCH /appointments/:appointmentId/reschedule`
 
-### Doctor
-- `PUT /doctor/availability` - set weekly slots
-- `GET /doctor/appointments?date=...` - view appointments
-- `PATCH /doctor/appointments/:appointmentId/status` - confirm/reject/complete
-- `GET /doctor/schedule?date=YYYY-MM-DD` - daily schedule
+### Doctor (doctor only)
+- `PUT /doctor/availability`
+- `GET /doctor/appointments`
+- `PATCH /doctor/appointments/:appointmentId/status`
+- `GET /doctor/schedule?date=YYYY-MM-DD`
 
-### Admin
-- `GET /admin/users` - all users
-- `GET /admin/doctors` - all doctors
-- `PATCH /admin/doctors/:doctorId/approval` - approve/reject doctor
-- `GET /admin/appointments` - monitor appointments
+### Admin (admin only)
+- `GET /admin/users`
+- `GET /admin/doctors`
+- `GET /admin/appointments`
+- `PATCH /admin/doctors/:doctorId/approval`
 
-### Notifications
-- `GET /notifications` - list notifications
-- `PATCH /notifications/:notificationId/read` - mark as read
+### Notifications (authenticated)
+- `GET /notifications`
+- `PATCH /notifications/:notificationId/read`
 
----
+## 6. Frontend Design
 
-## 4) Authentication and Authorization Flow
+- Routing is handled in `App.jsx` with role-protected routes.
+- `AuthContext` manages login state and session bootstrap from stored token.
+- Axios client centralizes API base URL and auth header injection.
+- Dashboards are separated by role: patient, doctor, admin.
 
-1. User logs in or registers.
-2. Backend returns JWT.
-3. Frontend stores token in `localStorage`.
-4. Axios request interceptor sends `Authorization: Bearer <token>` automatically.
-5. Backend `protect` middleware verifies token and attaches `req.user`.
-6. Backend `authorize("role")` middleware restricts role-based routes.
-
----
-
-## 5) Step-by-Step Setup
+## 7. Local Setup
 
 ### Prerequisites
 - Node.js 18+
-- MongoDB running locally (or Atlas URI)
+- MongoDB instance (local or Atlas)
 
-### Backend Setup
-1. Open terminal:
-   ```bash
-   cd backend
-   npm install
-   ```
-2. Create env file:
-   ```bash
-   copy .env.example .env
-   ```
-3. Update values in `.env`:
-   - `MONGODB_URI`
-   - `JWT_SECRET`
-   - (optional) mail config for real email delivery
-4. Optional: create admin account
-   ```bash
-   npm run seed:admin
-   ```
-5. Optional: load sample doctors
-  ```bash
-  npm run seed:doctors
-  ```
-6. Start backend:
-   ```bash
-   npm run dev
-   ```
+### Backend
+```bash
+cd backend
+npm install
+copy .env.example .env
+npm run dev
+```
 
-### Frontend Setup
-1. Open another terminal:
-   ```bash
-   cd frontend
-   npm install
-   ```
-2. Create env file:
-   ```bash
-   copy .env.example .env
-   ```
-3. Start frontend:
-   ```bash
-   npm run dev
-   ```
-4. Open browser at: `http://localhost:5173`
+Optional seed scripts:
+```bash
+npm run seed:admin
+npm run seed:doctors
+```
 
----
+### Frontend
+```bash
+cd frontend
+npm install
+copy .env.example .env
+npm run dev
+```
 
-## 6) How Each Main Part Works (Student-Friendly)
+Frontend default URL: `http://localhost:5173`
 
-### Backend MVC
-- **Models** define database shape.
-- **Controllers** contain business logic.
-- **Routes** map URL endpoints to controller functions.
-- **Middlewares** run before controllers for auth/validation/errors.
-- **Services** hold reusable side effects (emails/notifications).
+## 8. Configuration
 
-### Booking logic (very important)
-In `appointmentController.js`:
-- Check doctor exists and is approved
-- Check selected slot is in doctor availability for that day
-- Create appointment with `pending` status
-- If same doctor/date/slot already active, MongoDB unique index throws duplicate key error (`11000`)
-- Return conflict message (`409`) so UI can inform user
+Backend `.env` keys:
+- `PORT`
+- `MONGODB_URI`
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `CLIENT_URL`
+- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM` (optional for real email)
+- `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (used by seed script)
 
-### Notifications
-`notificationService.js` does two things:
-- Creates in-app notification record in MongoDB
-- Sends optional email (or logs mock output in local mode)
+Frontend `.env` keys:
+- `VITE_API_BASE_URL`
 
-### Frontend architecture
-- `AuthContext` stores logged-in user and token lifecycle
-- `ProtectedRoute` blocks routes if user is not logged in or has wrong role
-- Each dashboard calls backend APIs and updates local state
-- Tailwind utility classes keep UI responsive and modern
+## 9. Run Scripts
 
----
+Backend:
+- `npm run dev` - start API with nodemon
+- `npm start` - start API with node
+- `npm run seed:admin` - create admin user
+- `npm run seed:doctors` - create sample doctors
 
-## 7) Notes for College Students
+Frontend:
+- `npm run dev` - start Vite dev server
+- `npm run build` - production build
+- `npm run preview` - preview build
 
-- Start by understanding one flow first: `register -> login -> book appointment`.
-- Use Postman to test backend endpoints before debugging frontend.
-- Keep statuses consistent (`pending`, `confirmed`, etc.) between backend and frontend.
-- When adding new feature, update:
-  1. model (if DB shape changes)
-  2. controller logic
-  3. route
-  4. frontend API call + UI
+## 10. Security Notes
 
----
-
-## 8) Future Improvements
-
-- Add pagination and filters for large admin lists
-- Add calendar UI for doctor availability
-- Add WebSocket for live notifications
-- Add unit/integration tests (Jest + Supertest + React Testing Library)
-- Add Docker and CI/CD pipeline
+- Do not commit real credentials in `.env` or `.env.example`.
+- Rotate any secrets that were previously exposed.
+- Use a strong `JWT_SECRET` and environment-specific config for deployment.
